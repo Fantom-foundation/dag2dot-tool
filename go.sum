@@ -1,0 +1,4 @@
+github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 h1:zN2lZNZRflqFyxVaTIU61KNKQ9C0055u9CAfpmqUvo4=
+github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3/go.mod h1:nPpo7qLxd6XL3hWJG/O60sR8ZKfMCiIoNap5GvD12KU=
+github.com/windler/dotgraph v0.0.0-20181029120057-04e185ef91e0 h1:tRwV7mwSco9M7o3Bhut0WPqeWOJZtPk0DzSmV1FWiD4=
+github.com/windler/dotgraph v0.0.0-20181029120057-04e185ef91e0/go.mod h1:hpXEeI2c+QkuKZFTwKqxjBl79XCi7CPN2CtlXBo4hVo=
