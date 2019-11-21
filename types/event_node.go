@@ -1,8 +1,9 @@
 package types
 
 import (
-	"git.sfxdx.ru/fantom/dot-tool/rpc"
 	"strconv"
+
+	"github.com/Fantom-foundation/dag2dot-tool/rpc"
 )
 
 type EventNode struct {

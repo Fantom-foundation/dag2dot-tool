@@ -1,4 +1,4 @@
-module git.sfxdx.ru/fantom/dot-tool
+module github.com/Fantom-foundation/dag2dot-tool
 
 go 1.13
 

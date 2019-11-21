@@ -12,9 +12,9 @@ import (
 	"github.com/golang-collections/collections/stack"
 	"github.com/windler/dotgraph/renderer"
 
-	"git.sfxdx.ru/fantom/dot-tool/dot"
-	"git.sfxdx.ru/fantom/dot-tool/rpc"
-	"git.sfxdx.ru/fantom/dot-tool/types"
+	"github.com/Fantom-foundation/dag2dot-tool/dot"
+	"github.com/Fantom-foundation/dag2dot-tool/rpc"
+	"github.com/Fantom-foundation/dag2dot-tool/types"
 )
 
 const (

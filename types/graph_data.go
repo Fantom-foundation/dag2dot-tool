@@ -1,6 +1,6 @@
 package types
 
-import "git.sfxdx.ru/fantom/dot-tool/dot"
+import "github.com/Fantom-foundation/dag2dot-tool/dot"
 
 type GraphData struct {
 	nodes map[string]*dot.Node
