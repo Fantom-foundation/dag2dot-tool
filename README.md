@@ -2,6 +2,35 @@
 
 This util get events data from lachesis node and create DAG on .dot and .png files.
 
+#### Simple start
+
+You should have installed and runing dockerd service.
+You should have installed Go lang compiler.
+
+```bash
+cd ~/
+git clone https://github.com/Fantom-foundation/go-lachesis.git
+cd cd go-lachesis/docker
+# N=<count of nodes required for start>
+N=5 ./start.sh
+
+# wait for all nodes runed and checked links 
+
+cd ~/
+git clone https://github.com/Fantom-foundation/dag2dot-tool.git
+cd dag2dot-tool
+go build ./cmd/dot-tool
+
+# For first node using port 4000, for second - 4001, etc...
+mkdir ./images
+./dot-tool -mode epoch -host localhost -port 4000 -out ./images
+# It is worked in infinity loop mode. When you have enough images, press Ctrl-C on runing dot-tool  
+# Watch images in directory ./images
+
+# If you want watch detailing process of creating DAG, use command:
+./dot-tool -mode root -host localhost -port 4000 -out ./images
+```
+
 #### Parameters
 
 **-mode** (root|epoch) - mode of create output files. 
