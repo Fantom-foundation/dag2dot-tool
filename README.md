@@ -10,11 +10,11 @@ You should have installed Go lang compiler.
 ```bash
 cd ~/
 git clone https://github.com/Fantom-foundation/go-lachesis.git
-cd cd go-lachesis/docker
+cd go-lachesis/docker
 # N=<count of nodes required for start>
 N=5 ./start.sh
 
-# wait for all nodes runed and checked links 
+# wait for all nodes run and connected
 
 cd ~/
 git clone https://github.com/Fantom-foundation/dag2dot-tool.git
