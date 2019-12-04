@@ -16,7 +16,7 @@ set -e
 N=$1
 
 #
-EXEC=./build/dot-tool
+EXEC=./bin/dot-tool
 mode=$2
 
 # default ip using localhost
