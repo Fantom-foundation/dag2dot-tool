@@ -62,7 +62,7 @@ type EventResponse struct {
 }
 
 func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
-	req := `{"jsonrpc":"2.0","method":"debug_getHeads","params":[],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"debug_getHeads","params":[-1],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
