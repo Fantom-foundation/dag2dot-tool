@@ -36,7 +36,7 @@ var graphAttributes = []string{"Damping", "K", "URL", "aspect", "bb", "bgcolor",
 	"repulsiveforce", "resolution", "root", "rotate", "searchsize", "sep",
 	"showboxes", "style", "size", "smoothing", "sortv", "splines", "start",
 	"stylesheet", "target", "truecolor", "viewport", "voro_margin",
-	"rank"}
+	"rank", "newrank"}
 
 var edgeAttributes = []string{"URL", "arrowhead", "arrowsize", "arrowtail",
 	"color", "colorscheme", "comment", "constraint", "decorate", "dir",
