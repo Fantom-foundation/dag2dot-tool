@@ -23,6 +23,7 @@ mode=$2
 IP=127.0.0.1
 # default port PORT
 # the actual ports are PORT+1, PORT+2, etc (18541, 18542, 18543, ... )
+#PORT=18540
 PORT=4000
 
 
