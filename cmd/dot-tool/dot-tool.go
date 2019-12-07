@@ -134,6 +134,13 @@ mainLoop:
 				id, _ := strconv.ParseInt(p.GetId(), 16, 64)
 				sg.Set("sortv", strconv.FormatInt(id, 10))
 				subGraphs[p.NodeGroup] = sg
+				
+				pseudoNode := dot.NewNode(p.NodeGroup)
+				graphData.AddNode(pseudoNode)
+				pseudoNode.Set("style", "invis")
+				pseudoNode.Set("width", "0")
+				sg.AddNode(pseudoNode)
+				inGraph[p.NodeGroup] = pseudoNode
 			}
 			n.Set("shape", "tripleoctagon")
 
@@ -212,6 +219,13 @@ mainLoop:
 						id, _ := strconv.ParseInt(p.GetId(), 16, 64)
 						sg.Set("sortv", strconv.FormatInt(id, 10))
 						subGraphs[p.NodeGroup] = sg
+						
+						pseudoNode := dot.NewNode(p.NodeGroup)
+						graphData.AddNode(pseudoNode)
+						pseudoNode.Set("style", "invis")
+						pseudoNode.Set("width", "0")
+						sg.AddNode(pseudoNode)
+						inGraph[p.NodeGroup] = pseudoNode
 					}
 					sg.AddNode(n)
 					inGraph[p.NodeName] = n
@@ -219,11 +233,11 @@ mainLoop:
 				// Add edge from main node to parent
 				e := dot.NewEdge(mainNode, n)
 				graphData.AddEdge(e)
+				e.Set("constraint", "true")
 				if node.NodeGroup == p.NodeGroup {
 					sg, _ := subGraphs[p.NodeGroup]
 					sg.AddEdge(e)
 				} else {
-					e.Set("constraint", "false")
 					extEdges = append(extEdges, e)
 				}
 
@@ -234,16 +248,24 @@ mainLoop:
 
 		// Create graph
 		g := dot.NewGraph(graphName)
-		g.Set("pack", "true")
-		// g.Set("compound", "true")
-		g.Set("packmode", "array_u")
-
+		// set attribs to local
+		g.Set("clusterrank", "local")
+		g.Set("compound", "true")
+		g.Set("newrank", "true")
+		g.Set("ranksep", "0.05")
+		
 		// Sort subgraphs names
 		subGraphsNames := make([]string, 0, len(subGraphs))
 		for sgName, _ := range subGraphs {
 			subGraphsNames = append(subGraphsNames, sgName)
 		}
 		sort.Strings(subGraphsNames)
+
+		// FIXED: dot program renders subgraphs not in the ordering that specified
+		//   so we introduce pseudo nodes and edges to work around
+		rankAttrib := make([]string, 1, 1)
+		rankAttrib[0]= "\"" + strings.Join(subGraphsNames,`" -> "`) + "\" [style = invis, constraint = true];"
+		g.SameRank(rankAttrib)
 
 		// Add subgraphs in graph with sort order
 		for _, subName := range subGraphsNames {
