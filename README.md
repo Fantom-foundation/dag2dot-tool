@@ -28,9 +28,10 @@ make
 
 Third, run the example:
 ```bash
-# run the script with N=5
-./bin/start.sh 5
+# run the script with N=5 in epoch mode
+./bin/start.sh 5 epoch
 # outputs are generated in the folder ./lachesis_images
+# You can also run in root mode: ./bin/start.sh 5 root
 
 # stop the script
 ./bin/stop.sh
