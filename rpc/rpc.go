@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+// An RPC client requests event data from RPC service on a Lachasis node
 type RPC struct {
 	url string
 }

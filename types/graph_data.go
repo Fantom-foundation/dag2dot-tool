@@ -2,11 +2,13 @@ package types
 
 import "github.com/Fantom-foundation/dag2dot-tool/dot"
 
+// GraphData consists of nodes and edges
 type GraphData struct {
 	nodes map[string]*dot.Node
 	edges map[string]*dot.Edge
 }
 
+// Add a node
 func (gd *GraphData) AddNode(n *dot.Node) {
 	if gd.nodes == nil {
 		gd.nodes = make(map[string]*dot.Node)
@@ -15,6 +17,7 @@ func (gd *GraphData) AddNode(n *dot.Node) {
 	gd.nodes[n.Name()] = n
 }
 
+// Add an edge
 func (gd *GraphData) AddEdge(e *dot.Edge) {
 	if gd.edges == nil {
 		gd.edges = make(map[string]*dot.Edge)
@@ -24,6 +27,7 @@ func (gd *GraphData) AddEdge(e *dot.Edge) {
 	gd.edges[key] = e
 }
 
+// Mark the change in the graph data using new color
 func (gd *GraphData) MarkChanges(old *GraphData, newColor, newPenWidth, colorRoot, colorNewRoot, colorOldRoot string) {
 	if old == nil {
 		return

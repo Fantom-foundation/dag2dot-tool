@@ -6,6 +6,7 @@ import (
 	"github.com/Fantom-foundation/dag2dot-tool/rpc"
 )
 
+// A node to query to event data from
 type EventNode struct {
 	rpc.Event
 	NodeName string

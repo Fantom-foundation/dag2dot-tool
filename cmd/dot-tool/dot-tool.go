@@ -17,20 +17,25 @@ import (
 	"github.com/Fantom-foundation/dag2dot-tool/types"
 )
 
+// The main entry point of the dagtool.
+
 const (
 	colorRoot    = "#FFFF00"
 	colorNewRoot = "#AAAA00"
 	colorOldRoot = "#888888"
 )
 
+// configs
 type Config struct {
 	RPCHost   string
 	RPCPort   int
 	OutPath   string
 	LvlLimit  int
 	OnlyEpoch bool
+	RenderFile bool
 }
 
+// main function
 func main() {
 	var cfg Config
 	var mode string
@@ -40,6 +45,7 @@ func main() {
 	flag.IntVar(&cfg.LvlLimit, "limit", 0, "DAG level limit")
 	flag.StringVar(&cfg.OutPath, "out", "", "Path of directory for save DOT files")
 	flag.StringVar(&mode, "mode", "root", "Mode:\nroot - single shot to every root node changes\nepoch - single shot to every epoch")
+	flag.BoolVar(&cfg.RenderFile, "render", true, "Render:\n true - render dot file to png image\n false - no rendering")
 	flag.Parse()
 
 	if cfg.OutPath == "" {
@@ -303,18 +309,20 @@ mainLoop:
 			_ = fl.Close()
 
 			// Save png file
-			pngFileName := strings.TrimRight(cfg.OutPath, "/") + "/" + graphName + ".png"
-			if cfg.OnlyEpoch {
-				pngFileName = strings.TrimRight(cfg.OutPath, "/") + "/" + "DAG-EPOCH-" + strconv.FormatInt(prevEpoch, 10) + ".png"
+			if cfg.RenderFile {
+				pngFileName := strings.TrimRight(cfg.OutPath, "/") + "/" + graphName + ".png"
+				if cfg.OnlyEpoch {
+					pngFileName = strings.TrimRight(cfg.OutPath, "/") + "/" + "DAG-EPOCH-" + strconv.FormatInt(prevEpoch, 10) + ".png"
+				}
+				r := &renderer.PNGRenderer{
+					OutputFile: pngFileName + ".tmp",
+				}
+				r.Render(g.String())
+				// Remove temporary file
+				_ = os.Remove(pngFileName + ".tmp.dot")
+				// Move tmp file to png
+				_ = os.Rename(pngFileName+".tmp", pngFileName)
 			}
-			r := &renderer.PNGRenderer{
-				OutputFile: pngFileName + ".tmp",
-			}
-			r.Render(g.String())
-			// Remove temporary file
-			_ = os.Remove(pngFileName + ".tmp.dot")
-			// Move tmp file to png
-			_ = os.Rename(pngFileName+".tmp", pngFileName)
 		}
 
 		prevGraph = g
