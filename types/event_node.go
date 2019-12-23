@@ -24,11 +24,11 @@ func NewEventNode(ev *rpc.Event) *EventNode {
 	return &EventNode{
 		Event: *ev,
 		NodeName:    nodeName,
-		NodeGroup:	 "host-"+ ev.Creator[len(ev.Creator)-4:],
+		NodeGroup:	 "host-"+ strconv.FormatInt(ev.Creator, 10),
 	}
 }
 
 func (n EventNode) GetId() string {
-	return n.Creator[len(n.Creator)-4:]
+	return strconv.FormatInt(n.Creator, 10)
 }
 

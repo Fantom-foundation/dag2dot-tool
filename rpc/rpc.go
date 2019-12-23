@@ -28,11 +28,11 @@ type TopHeads struct {
 
 type EventHeader struct {
 	ClaimedTime      int64    `json:"claimedTime"`
-	Creator          string   `json:"creator"`
+	Creator          int64   `json:"creator"`
 	Epoch            int64    `json:"epoch"`
 	ExtraData        string   `json:"extraData"`
 	Frame            int64    `json:"frame"`
-	GasPowerLeft     int64    `json:"gasPowerLeft"`
+	GasPowerLeft 	GasPowerLeft`json:"gasPowerLeft"`
 	GasPowerUsed     int64    `json:"gasPowerUsed"`
 	Hash             string   `json:"hash"`
 	IsRoot           bool     `json:"isRoot"`
@@ -43,6 +43,10 @@ type EventHeader struct {
 	Seq              int64    `json:"seq"`
 	TransactionsRoot string   `json:"transactionsRoot"`
 	Version          int      `json:"version"`
+}
+
+type GasPowerLeft struct {
+        Gas [2]uint64
 }
 
 type EventHeaderResponse struct {
@@ -63,7 +67,7 @@ type EventResponse struct {
 }
 
 func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
-	req := `{"jsonrpc":"2.0","method":"debug_getHeads","params":[-1],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"eth_getHeads","params":["pending"],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -74,7 +78,7 @@ func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
 	top := TopHeads{}
 	err = json.Unmarshal(body, &top)
 	if err != nil {
-		log.Printf("Json parse response debug_getHeads body error: %s\n", err)
+		log.Printf("Json parse response eth_getHeads body error: %s\n", err)
 		return nil, err
 	}
 
@@ -82,7 +86,7 @@ func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
 }
 
 func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
-	req := `{"jsonrpc":"2.0","method":"debug_getEventHeader","params":["` + hash + `"],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"eth_getEventHeader","params":["` + hash + `"],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -93,7 +97,7 @@ func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
 	head := EventHeaderResponse{}
 	err = json.Unmarshal(body, &head)
 	if err != nil {
-		log.Printf("Json parse response debug_getHeads body error: %s\n", err)
+		log.Printf("Json parse response eth_getEventHeader body error: %s\n", err)
 		return nil, err
 	}
 
@@ -101,7 +105,7 @@ func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
 }
 
 func (rpc *RPC) GetEvent(hash string) (*Event, error) {
-	req := `{"jsonrpc":"2.0","method":"debug_getEvent","params":["` + hash + `", true],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"eth_getEvent","params":["` + hash + `", true],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -112,7 +116,7 @@ func (rpc *RPC) GetEvent(hash string) (*Event, error) {
 	head := EventResponse{}
 	err = json.Unmarshal(body, &head)
 	if err != nil {
-		log.Printf("Json parse response debug_getHeads body error: %s\n", err)
+		log.Printf("Json parse response eth_getEvent body error: %s\n", err)
 		return nil, err
 	}
 
