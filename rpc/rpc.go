@@ -67,7 +67,7 @@ type EventResponse struct {
 }
 
 func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
-	req := `{"jsonrpc":"2.0","method":"eth_getHeads","params":["pending"],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"ftm_getHeads","params":["pending"],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -78,7 +78,7 @@ func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
 	top := TopHeads{}
 	err = json.Unmarshal(body, &top)
 	if err != nil {
-		log.Printf("Json parse response eth_getHeads body error: %s\n", err)
+		log.Printf("Json parse response ftm_getHeads body error: %s\n", err)
 		return nil, err
 	}
 
@@ -86,7 +86,7 @@ func (rpc *RPC) GetTopHeads() (*TopHeads, error) {
 }
 
 func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
-	req := `{"jsonrpc":"2.0","method":"eth_getEventHeader","params":["` + hash + `"],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"ftm_getEventHeader","params":["` + hash + `"],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -97,7 +97,7 @@ func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
 	head := EventHeaderResponse{}
 	err = json.Unmarshal(body, &head)
 	if err != nil {
-		log.Printf("Json parse response eth_getEventHeader body error: %s\n", err)
+		log.Printf("Json parse response ftm_getEventHeader body error: %s\n", err)
 		return nil, err
 	}
 
@@ -105,7 +105,7 @@ func (rpc *RPC) GetEventHeader(hash string) (*EventHeader, error) {
 }
 
 func (rpc *RPC) GetEvent(hash string) (*Event, error) {
-	req := `{"jsonrpc":"2.0","method":"eth_getEvent","params":["` + hash + `", true],"id":1}`
+	req := `{"jsonrpc":"2.0","method":"ftm_getEvent","params":["` + hash + `", true],"id":1}`
 
 	body, err := rpc.call(req)
 	if err != nil {
@@ -116,7 +116,7 @@ func (rpc *RPC) GetEvent(hash string) (*Event, error) {
 	head := EventResponse{}
 	err = json.Unmarshal(body, &head)
 	if err != nil {
-		log.Printf("Json parse response eth_getEvent body error: %s\n", err)
+		log.Printf("Json parse response ftm_getEvent body error: %s\n", err)
 		return nil, err
 	}
 
