@@ -1,8 +1,9 @@
 package dot_test
 
 import (
-	"dot"
 	"fmt"
+
+	"github.com/Fantom-foundation/dag2dot-tool/dot"
 )
 
 func ExampleNewGraph() {
