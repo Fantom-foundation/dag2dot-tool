@@ -27,7 +27,7 @@ IP=127.0.0.1
 PORT=4000
 
 
-declare -r DOT_DIR=./lachesis_images
+declare -r DOT_DIR=./opera_images
 
 mkdir -p ${DOT_DIR}
 

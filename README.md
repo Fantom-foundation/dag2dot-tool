@@ -1,17 +1,17 @@
 ### dot-tool
 
-This util get events data from lachesis node and create DAG on .dot and .png files.
+This util get events data from opera node and create DAG on .dot and .png files.
 
 #### Simple start
 
 You should have installed and runing dockerd service.
 You should have installed Go lang compiler.
 
-First, start Lachesis nodes:
+First, start opera nodes:
 ```bash
 cd ~/
-git clone https://github.com/Fantom-foundation/go-lachesis.git
-cd go-lachesis/docker
+git clone https://github.com/Fantom-foundation/go-opera.git
+cd go-opera/docker
 # N=<count of nodes required for start>
 N=5 ./start.sh
 
@@ -30,7 +30,7 @@ Third, run the example:
 ```bash
 # run the script with N=5 in epoch mode
 ./bin/start.sh 5 epoch
-# outputs are generated in the folder ./lachesis_images
+# outputs are generated in the folder ./opera_images
 # You can also run in root mode: ./bin/start.sh 5 root
 
 # stop the script
@@ -43,9 +43,9 @@ Third, run the example:
 In "root" mode separate files created at every changes in root nodes of graph (mean only graph root. not IsRoot status). 
 In "epoch" mode separate files created at every epoch. But in process for last epoch files replaced in process creating DAG (possible watch in process).
 
-**-host** - rpc host of lachesis node for requests. Default - "localhost".
+**-host** - rpc host of opera node for requests. Default - "localhost".
 
-**-port** - rpc port of lachesis node for requests. Default - 18545.
+**-port** - rpc port of opera node for requests. Default - 18545.
 
 **-limit** - for limit count of used events by level, you can use this param. It is usable for very big DAG for watch only top of graph - with changed data.
 
