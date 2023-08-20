@@ -1,19 +1,26 @@
 package main
 
 import (
+	"context"
 	"flag"
+	"fmt"
 	"log"
+	"math/big"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Fantom-foundation/go-opera/ftmclient"
+	"github.com/Fantom-foundation/lachesis-base/hash"
+	"github.com/Fantom-foundation/lachesis-base/inter/idx"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/golang-collections/collections/stack"
 	"github.com/windler/dotgraph/renderer"
 
 	"github.com/Fantom-foundation/dag2dot-tool/dot"
-	"github.com/Fantom-foundation/dag2dot-tool/rpc"
 	"github.com/Fantom-foundation/dag2dot-tool/types"
 )
 
@@ -25,13 +32,17 @@ const (
 	colorOldRoot = "#888888"
 )
 
+var (
+	LatestSealedEpoch = big.NewInt(-1)
+)
+
 // configs
 type Config struct {
-	RPCHost   string
-	RPCPort   int
-	OutPath   string
-	LvlLimit  int
-	OnlyEpoch bool
+	RPCHost    string
+	RPCPort    int
+	OutPath    string
+	LvlLimit   int
+	OnlyEpoch  bool
 	RenderFile bool
 }
 
@@ -59,13 +70,20 @@ func main() {
 }
 
 func ProcessLoop(cfg Config) {
-	r := rpc.NewRPC(cfg.RPCHost, cfg.RPCPort)
 
-	processedTop := make(map[string]bool)
+	url := fmt.Sprintf("http://%s:%d/", cfg.RPCHost, cfg.RPCPort)
+	conn, err := rpc.Dial(url)
+	if err != nil {
+		log.Panicf("Can not connect RPC: %s\n", err)
+	}
+	r := ftmclient.NewClient(conn)
+	ctx := context.TODO()
+
+	processedTop := make(map[hash.Event]bool)
 
 	var prevGraphData *types.GraphData
 	var prevGraph *dot.Graph
-	var prevEpoch int64
+	var prevEpoch idx.Epoch
 
 mainLoop:
 	for {
@@ -76,48 +94,48 @@ mainLoop:
 		graphData := &types.GraphData{}
 
 		// Get top events
-		top, err := r.GetTopHeads()
+		top, err := r.GetHeads(ctx, LatestSealedEpoch)
 		if err != nil {
 			log.Panicf("Can not get top events: %s\n", err)
 		}
 
-		// log.Printf("TOP: %+v\n", top)
+		// log.Printf("TOP: %+v\n	", top)
 
-		nodes := make(map[string]*types.EventNode)
+		nodes := make(map[hash.Event]*types.EventNode)
 		inGraph := make(map[string]*dot.Node)
 
 		hashStack := stack.New()
 
-		var startLevel int64
-		var curEpoch int64
+		var startLevel idx.Event
+		var curEpoch idx.Epoch
 
 		newEpoch := false
 
-		if len(top.Result) == 0 {
+		if len(top) == 0 {
 			log.Printf("No data for loop %s\n", graphName)
 			time.Sleep(1 * time.Second)
 			newEpoch = true
 			continue mainLoop
 		}
 
-		for _, h := range top.Result {
+		for _, h := range top {
 			if processedTop[h] {
 				time.Sleep(100 * time.Millisecond)
 				continue mainLoop
 			}
 			processedTop[h] = true
 
-			head, err := r.GetEvent(h)
+			head, err := r.GetEvent(ctx, h)
 			if err != nil {
 				log.Panicf("Can not get head: %s\n", err)
 			}
-			curEpoch = head.Epoch
+			curEpoch = head.Epoch()
 
-			if head.Epoch != prevEpoch {
+			if head.Epoch() != prevEpoch {
 				newEpoch = true
 			}
 
-			startLevel = head.Seq
+			startLevel = head.Seq()
 
 			// log.Printf("TOP head: %+v\n", head)
 
@@ -126,10 +144,12 @@ mainLoop:
 
 			n := dot.NewNode(p.NodeName)
 			graphData.AddNode(n)
-			if p.IsRoot {
-				n.Set("style", "filled")
-				n.Set("fillcolor", colorRoot)
-			}
+			// TODO: restore isRoot attribute
+			/*
+				if p.IsRoot {
+					n.Set("style", "filled")
+					n.Set("fillcolor", colorRoot)
+				}*/
 
 			sg, ok := subGraphs[p.NodeGroup]
 			if !ok {
@@ -140,7 +160,7 @@ mainLoop:
 				id, _ := strconv.ParseInt(p.GetId(), 16, 64)
 				sg.Set("sortv", strconv.FormatInt(id, 10))
 				subGraphs[p.NodeGroup] = sg
-				
+
 				pseudoNode := dot.NewNode(p.NodeGroup)
 				graphData.AddNode(pseudoNode)
 				pseudoNode.Set("style", "invis")
@@ -161,21 +181,21 @@ mainLoop:
 
 		// log.Printf("DBG1\n", )
 
-		processed := make(map[string]bool)
+		processed := make(map[hash.Event]bool)
 
 		for hashStack.Len() > 0 {
-			hash := hashStack.Pop().(string)
-			if processed[hash] {
+			h := hashStack.Pop().(hash.Event)
+			if processed[h] {
 				// Skip already processed hodes
 				continue
 			}
-			processed[hash] = true
+			processed[h] = true
 
-			// log.Printf("DBG2: %s\n", hash)
+			// log.Printf("DBG2: %s\n", h)
 			// Get current node
-			node, present := nodes[hash]
+			node, present := nodes[h]
 			if !present {
-				head, err := r.GetEvent(hash)
+				head, err := r.GetEvent(ctx, h)
 				if err != nil {
 					log.Panicf("Can not get head: %s\n", err)
 				}
@@ -183,19 +203,19 @@ mainLoop:
 				node = types.NewEventNode(head)
 			}
 
-			if cfg.LvlLimit > 0 && (startLevel-node.Seq) > int64(cfg.LvlLimit) {
+			if cfg.LvlLimit > 0 && int(startLevel-node.Seq()) > cfg.LvlLimit {
 				log.Println("Finish DAG by limit")
 				break
 			}
 			mainNode := inGraph[node.NodeName]
 
 			// For all parents
-			for _, parent := range node.Parents {
+			for _, parent := range node.Parents() {
 				// log.Println("DBG3")
 				// Get parent node
 				p, present := nodes[parent]
 				if !present {
-					head, err := r.GetEvent(parent)
+					head, err := r.GetEvent(ctx, parent)
 					if err != nil {
 						log.Panicf("Can not get head: %s\n", err)
 					}
@@ -211,11 +231,13 @@ mainLoop:
 				if !ok {
 					n = dot.NewNode(p.NodeName)
 					graphData.AddNode(n)
-					if p.IsRoot {
-						n.Set("style", "filled")
-						n.Set("fillcolor", colorRoot)
-					}
-
+					// TODO: restore isRoot attribute
+					/*
+						if p.IsRoot {
+							n.Set("style", "filled")
+							n.Set("fillcolor", colorRoot)
+						}
+					*/
 					sg, ok := subGraphs[p.NodeGroup]
 					if !ok {
 						idx := len(subGraphs)
@@ -225,7 +247,7 @@ mainLoop:
 						id, _ := strconv.ParseInt(p.GetId(), 16, 64)
 						sg.Set("sortv", strconv.FormatInt(id, 10))
 						subGraphs[p.NodeGroup] = sg
-						
+
 						pseudoNode := dot.NewNode(p.NodeGroup)
 						graphData.AddNode(pseudoNode)
 						pseudoNode.Set("style", "invis")
@@ -259,7 +281,7 @@ mainLoop:
 		g.Set("compound", "true")
 		g.Set("newrank", "true")
 		g.Set("ranksep", "0.05")
-		
+
 		// Sort subgraphs names
 		subGraphsNames := make([]string, 0, len(subGraphs))
 		for sgName, _ := range subGraphs {
@@ -270,7 +292,7 @@ mainLoop:
 		// FIXED: dot program renders subgraphs not in the ordering that specified
 		//   so we introduce pseudo nodes and edges to work around
 		rankAttrib := make([]string, 1, 1)
-		rankAttrib[0]= "\"" + strings.Join(subGraphsNames,`" -> "`) + "\" [style = invis, constraint = true];"
+		rankAttrib[0] = "\"" + strings.Join(subGraphsNames, `" -> "`) + "\" [style = invis, constraint = true];"
 		g.SameRank(rankAttrib)
 
 		// Add subgraphs in graph with sort order
@@ -294,9 +316,9 @@ mainLoop:
 
 		if !cfg.OnlyEpoch || prevEpoch != 0 {
 			// Save dot file
-			fileName := strings.TrimRight(cfg.OutPath, "/") + "/" + graphName + ".dot"
+			fileName := filepath.Join(cfg.OutPath, graphName+".dot")
 			if cfg.OnlyEpoch {
-				fileName = strings.TrimRight(cfg.OutPath, "/") + "/" + "DAG-EPOCH-" + strconv.FormatInt(prevEpoch, 10) + ".dot"
+				fileName = filepath.Join(cfg.OutPath, fmt.Sprintf("DAG-EPOCH-%d.dot", prevEpoch))
 			}
 			fl, err := os.Create(fileName)
 			if err != nil {
@@ -310,9 +332,9 @@ mainLoop:
 
 			// Save png file
 			if cfg.RenderFile {
-				pngFileName := strings.TrimRight(cfg.OutPath, "/") + "/" + graphName + ".png"
+				pngFileName := filepath.Join(cfg.OutPath, graphName+".png")
 				if cfg.OnlyEpoch {
-					pngFileName = strings.TrimRight(cfg.OutPath, "/") + "/" + "DAG-EPOCH-" + strconv.FormatInt(prevEpoch, 10) + ".png"
+					pngFileName = filepath.Join(cfg.OutPath, fmt.Sprintf("DAG-EPOCH-%d.png", prevEpoch))
 				}
 				r := &renderer.PNGRenderer{
 					OutputFile: pngFileName + ".tmp",
