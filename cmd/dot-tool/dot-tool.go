@@ -7,7 +7,6 @@ import (
 	"log"
 	"math/big"
 	"os"
-	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -18,7 +17,6 @@ import (
 	"github.com/Fantom-foundation/lachesis-base/inter/idx"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/golang-collections/collections/stack"
-	"github.com/windler/dotgraph/renderer"
 
 	"github.com/Fantom-foundation/dag2dot-tool/dot"
 	"github.com/Fantom-foundation/dag2dot-tool/types"
@@ -99,8 +97,6 @@ mainLoop:
 			log.Panicf("Can not get top events: %s\n", err)
 		}
 
-		// log.Printf("TOP: %+v\n	", top)
-
 		nodes := make(map[hash.Event]*types.EventNode)
 		inGraph := make(map[string]*dot.Node)
 
@@ -114,7 +110,6 @@ mainLoop:
 		if len(top) == 0 {
 			log.Printf("No data for loop %s\n", graphName)
 			time.Sleep(1 * time.Second)
-			newEpoch = true
 			continue mainLoop
 		}
 
@@ -136,8 +131,6 @@ mainLoop:
 			}
 
 			startLevel = head.Seq()
-
-			// log.Printf("TOP head: %+v\n", head)
 
 			p := types.NewEventNode(head)
 			nodes[h] = p
@@ -191,7 +184,6 @@ mainLoop:
 			}
 			processed[h] = true
 
-			// log.Printf("DBG2: %s\n", h)
 			// Get current node
 			node, present := nodes[h]
 			if !present {
@@ -211,7 +203,6 @@ mainLoop:
 
 			// For all parents
 			for _, parent := range node.Parents() {
-				// log.Println("DBG3")
 				// Get parent node
 				p, present := nodes[parent]
 				if !present {
@@ -315,36 +306,7 @@ mainLoop:
 		}
 
 		if !cfg.OnlyEpoch || prevEpoch != 0 {
-			// Save dot file
-			fileName := filepath.Join(cfg.OutPath, graphName+".dot")
-			if cfg.OnlyEpoch {
-				fileName = filepath.Join(cfg.OutPath, fmt.Sprintf("DAG-EPOCH-%d.dot", prevEpoch))
-			}
-			fl, err := os.Create(fileName)
-			if err != nil {
-				log.Panicf("Can not create file '%s': %s\n", fileName, err)
-			}
-			_, err = fl.WriteString(g.String())
-			if err != nil {
-				log.Panicf("Can not write data to file '%s': %s\n", fileName, err)
-			}
-			_ = fl.Close()
-
-			// Save png file
-			if cfg.RenderFile {
-				pngFileName := filepath.Join(cfg.OutPath, graphName+".png")
-				if cfg.OnlyEpoch {
-					pngFileName = filepath.Join(cfg.OutPath, fmt.Sprintf("DAG-EPOCH-%d.png", prevEpoch))
-				}
-				r := &renderer.PNGRenderer{
-					OutputFile: pngFileName + ".tmp",
-				}
-				r.Render(g.String())
-				// Remove temporary file
-				_ = os.Remove(pngFileName + ".tmp.dot")
-				// Move tmp file to png
-				_ = os.Rename(pngFileName+".tmp", pngFileName)
-			}
+			flushToFile(&cfg, prevEpoch, g)
 		}
 
 		prevGraph = g
