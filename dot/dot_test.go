@@ -1,9 +1,10 @@
 package dot_test
 
 import (
-	"dot"
 	"fmt"
 	"testing"
+
+	"github.com/Fantom-foundation/dag2dot-tool/dot"
 )
 
 func TestQuotingIfNecessary(t *testing.T) {

@@ -6,4 +6,4 @@ PROG=dot-tool
 pkill "${PROG}"
 
 # remove demo data
-#rm -rf ./lachesis_images
+#rm -rf ./opera_images

@@ -1,34 +1,26 @@
 package types
 
 import (
-	"strconv"
+	"fmt"
 
-	"github.com/Fantom-foundation/dag2dot-tool/rpc"
+	"github.com/Fantom-foundation/go-opera/inter"
 )
 
 // A node to query to event data from
 type EventNode struct {
-	rpc.Event
-	NodeName string
+	inter.EventI
+	NodeName  string
 	NodeGroup string
 }
 
-func NewEventNode(ev *rpc.Event) *EventNode {
-	trx := ""
-	if len(ev.Transactions) > 0 {
-		trx = " (trxs: "+strconv.FormatInt(int64(len(ev.Transactions)), 10)+")"
-	}
-	nodeName := strconv.FormatInt(ev.Epoch, 10)+"-"+strconv.FormatInt(ev.Lamport, 10)+"-"+ev.Hash[len(ev.Hash)-8:] +
-		"\n"+strconv.FormatInt(ev.Frame, 10)+"-"+strconv.FormatInt(ev.Seq, 10)+trx
-
+func NewEventNode(ev inter.EventI) *EventNode {
 	return &EventNode{
-		Event: *ev,
-		NodeName:    nodeName,
-		NodeGroup:	 "host-"+ strconv.FormatInt(ev.Creator, 10),
+		EventI:    ev,
+		NodeName:  fmt.Sprintf("%s\n%d-%d", ev.ID().String(), ev.Frame(), ev.Seq()),
+		NodeGroup: fmt.Sprintf("host-%d", ev.Creator()),
 	}
 }
 
 func (n EventNode) GetId() string {
-	return strconv.FormatInt(n.Creator, 10)
+	return fmt.Sprintf("%d", n.Creator())
 }
-

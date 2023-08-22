@@ -2,7 +2,7 @@
 
 # compare the dot output files
 N=$1
-dir=./lachesis_images
+dir=./opera_images
 FILE=DAG-EPOCH-1
 
 diffdir=${dir}/diff
