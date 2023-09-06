@@ -96,6 +96,11 @@ mainLoop:
 		if err != nil {
 			log.Panicf("Can not get top events: %s\n", err)
 		}
+		if len(top) == 0 {
+			log.Printf("No data for loop %s\n", graphName)
+			time.Sleep(1 * time.Second)
+			continue mainLoop
+		}
 
 		nodes := make(map[hash.Event]*types.EventNode)
 		inGraph := make(map[string]*dot.Node)
@@ -106,12 +111,6 @@ mainLoop:
 		var curEpoch idx.Epoch
 
 		newEpoch := false
-
-		if len(top) == 0 {
-			log.Printf("No data for loop %s\n", graphName)
-			time.Sleep(1 * time.Second)
-			continue mainLoop
-		}
 
 		for _, h := range top {
 			if processedTop[h] {
