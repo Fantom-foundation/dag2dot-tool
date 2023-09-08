@@ -31,7 +31,7 @@ const (
 )
 
 var (
-	LatestSealedEpoch = big.NewInt(-1)
+	PendingEpoch = big.NewInt(-1)
 )
 
 // configs
@@ -92,7 +92,7 @@ mainLoop:
 		graphData := &types.GraphData{}
 
 		// Get top events
-		top, err := r.GetHeads(ctx, LatestSealedEpoch)
+		top, err := r.GetHeads(ctx, PendingEpoch)
 		if err != nil {
 			log.Panicf("Can not get top events: %s\n", err)
 		}

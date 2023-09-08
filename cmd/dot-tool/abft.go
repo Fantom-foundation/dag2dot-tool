@@ -210,7 +210,7 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 		})
 
 	// 3. Iterate over events:
-	top, err := rpc.GetHeads(context.TODO(), LatestSealedEpoch)
+	top, err := rpc.GetHeads(context.TODO(), PendingEpoch)
 	if err != nil {
 		log.Panicf("Can not get top events: %s\n", err)
 	}
