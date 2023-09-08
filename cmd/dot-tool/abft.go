@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"math/big"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Fantom-foundation/go-opera/ftmclient"
 	"github.com/Fantom-foundation/go-opera/integration"
@@ -20,24 +22,17 @@ import (
 	"github.com/Fantom-foundation/lachesis-base/inter/idx"
 	"github.com/Fantom-foundation/lachesis-base/inter/pos"
 	"github.com/Fantom-foundation/lachesis-base/kvdb/memorydb"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/golang-collections/collections/stack"
 
 	"github.com/Fantom-foundation/dag2dot-tool/dot"
 )
 
-// readDagGraph read gossip.Store into inmem dot.Graph
-func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.Epoch) *dot.Graph {
+// readCurrentEpochDag reads epoch's events into inmem dot.Graph
+func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Graph {
 	// 0. Set gossip data:
 
 	cdb := abft.NewMemStore()
 	defer cdb.Close()
-	// ApplyGenesis()
-	cdb.SetEpochState(&abft.EpochState{
-		Epoch: from,
-	})
-	cdb.SetLastDecidedState(&abft.LastDecidedState{
-		LastDecidedFrame: abft.FirstFrame - 1,
-	})
 
 	dagIndexer := vecmt.NewIndex(panics("Vector clock"), cfg.VectorClock)
 	orderer := abft.NewOrderer(
@@ -54,11 +49,13 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 	// 1. Set dot.Graph data:
 
 	graph := dot.NewGraph("DOT")
+	graph.Set("clusterrank", "local")
+	graph.Set("newrank", "true")
+	graph.Set("ranksep", "0.05")
 	graph.Set("compound", "true")
 	graph.SetGlobalEdgeAttr("constraint", "true")
 	var (
 		clusters  idx.ValidatorID
-		g         *dot.SubGraph // epoch sub
 		subGraphs map[idx.ValidatorID]*dot.SubGraph
 		emitters  []string
 		nodes     map[hash.Event]*dot.Node
@@ -71,11 +68,7 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 		processed map[hash.Event]dag.Event
 	)
 
-	finishCurrentEpoch := func() {
-		if epoch == 0 {
-			return // nothing to finish
-		}
-
+	finishCurrentEpoch := func(epoch idx.Epoch) {
 		for f := idx.Frame(0); f <= cdb.GetLastDecidedFrame(); f++ {
 			rr := cdb.GetFrameRoots(f)
 			for _, r := range rr {
@@ -110,21 +103,19 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 
 		// NOTE: github.com/tmc/dot renders subgraphs not in the ordering that specified
 		//   so we introduce pseudo nodes and edges to work around
-		g.SameRank([]string{
+		graph.SameRank([]string{
 			"\"" + strings.Join(emitters, `" -> "`) + "\" [style = invis, constraint = true];",
 		})
 	}
 
-	resetToNewEpoch := func() {
-		name := fmt.Sprintf("epoch-%d", epoch)
-		g = dot.NewSubgraph(name)
-		g.Set("label", name)
-		g.Set("style", "dotted")
-		g.Set("compound", "true")
-		g.Set("clusterrank", "local")
-		g.Set("newrank", "true")
-		g.Set("ranksep", "0.05")
-		graph.AddSubgraph(g)
+	resetToNewEpoch := func(epoch idx.Epoch) {
+		// ApplyGenesis()
+		cdb.SetEpochState(&abft.EpochState{
+			Epoch: epoch,
+		})
+		cdb.SetLastDecidedState(&abft.LastDecidedState{
+			LastDecidedFrame: abft.FirstFrame - 1,
+		})
 
 		vv, err := rpc.GetValidators(context.TODO(), epoch)
 		if err != nil {
@@ -150,7 +141,7 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 			sg.Set("sortv", fmt.Sprintf("%d", clusters+v))
 			sg.Set("style", "dotted")
 			subGraphs[v] = sg
-			g.AddSubgraph(sg)
+			graph.AddSubgraph(sg)
 
 			pseudoNode := dot.NewNode(emitter)
 			pseudoNode.Set("style", "invis")
@@ -198,7 +189,7 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 					if processed[h].Creator() == e.Creator() {
 						sg.AddEdge(ref)
 					} else {
-						g.AddEdge(ref)
+						graph.AddEdge(ref)
 					}
 				}
 
@@ -219,32 +210,46 @@ func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.E
 		})
 
 	// 3. Iterate over events:
+	top, err := rpc.GetHeads(context.TODO(), LatestSealedEpoch)
+	if err != nil {
+		log.Panicf("Can not get top events: %s\n", err)
+	}
+	if len(top) == 0 {
+		log.Printf("No epoch heads\n")
+		time.Sleep(1 * time.Second)
+		return nil
+	}
+	hashStack := stack.New()
+	for _, h := range top {
+		hashStack.Push(h)
+	}
+	for hashStack.Len() > 0 {
+		h := hashStack.Pop().(hash.Event)
+		e, err := rpc.GetEvent(context.TODO(), h)
+		if err != nil {
+			log.Panicf("Can not get event: %s\n", err)
+		}
 
-	rpc.ForEachEvent(from, func(e *inter.EventPayload) bool {
-		// current epoch is finished, so process accumulated events
-		if epoch < e.Epoch() {
-			// break after last epoch:
-			if to >= from && e.Epoch() > to {
-				return false
-			}
-			finishCurrentEpoch()
+		if epoch == 0 {
 			epoch = e.Epoch()
-			resetToNewEpoch()
+			resetToNewEpoch(epoch)
 		}
 
 		buffer.PushEvent(e, "")
-		return true
-	})
-	finishCurrentEpoch()
 
-	// 4. Result
+		for _, parent := range e.Parents() {
+			hashStack.Push(parent)
+		}
+	}
+	finishCurrentEpoch(epoch)
 
+	// 4. Result:
 	return graph
 }
 
 func panics(name string) func(error) {
 	return func(err error) {
-		log.Crit(fmt.Sprintf("%s error", name), "err", err)
+		log.Fatalf(err.Error())
 	}
 }
 
