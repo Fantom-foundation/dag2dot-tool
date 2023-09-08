@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
+	"math/big"
 	"sort"
 	"strings"
 
-	"github.com/Fantom-foundation/go-opera/gossip"
+	"github.com/Fantom-foundation/go-opera/ftmclient"
 	"github.com/Fantom-foundation/go-opera/integration"
 	"github.com/Fantom-foundation/go-opera/inter"
 	"github.com/Fantom-foundation/go-opera/utils/adapters/vecmt2dagidx"
@@ -16,6 +18,7 @@ import (
 	"github.com/Fantom-foundation/lachesis-base/hash"
 	"github.com/Fantom-foundation/lachesis-base/inter/dag"
 	"github.com/Fantom-foundation/lachesis-base/inter/idx"
+	"github.com/Fantom-foundation/lachesis-base/inter/pos"
 	"github.com/Fantom-foundation/lachesis-base/kvdb/memorydb"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -23,7 +26,7 @@ import (
 )
 
 // readDagGraph read gossip.Store into inmem dot.Graph
-func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch) *dot.Graph {
+func readDagGraph(rpc *ftmclient.Client, cfg integration.Configs, from, to idx.Epoch) *dot.Graph {
 	// 0. Set gossip data:
 
 	cdb := abft.NewMemStore()
@@ -39,7 +42,7 @@ func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch
 	dagIndexer := vecmt.NewIndex(panics("Vector clock"), cfg.VectorClock)
 	orderer := abft.NewOrderer(
 		cdb,
-		&integration.GossipStoreAdapter{gdb},
+		&RpcStoreAdapter{rpc},
 		vecmt2dagidx.Wrap(dagIndexer),
 		panics("Lachesis"),
 		cfg.Lachesis)
@@ -81,21 +84,27 @@ func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch
 			}
 		}
 
-		bs0, _ := gdb.GetHistoryBlockEpochState(epoch)
-		blockFrom := bs0.LastBlock.Idx + 1
-
-		bs1, _ := gdb.GetHistoryBlockEpochState(epoch + 1)
-		blockTo := idx.Block(math.MaxUint64)
-		if bs1 != nil {
-			blockTo = bs1.LastBlock.Idx
+		blockFrom, err := rpc.GetEpochBlock(context.TODO(), epoch)
+		if err != nil {
+			panic(err) // TODO: try again
+		}
+		blockTo, err := rpc.GetEpochBlock(context.TODO(), epoch+1)
+		if err != nil {
+			panic(err) // TODO: try again
+		}
+		if blockTo == 0 {
+			blockTo = idx.Block(math.MaxUint64)
 		}
 
-		for b := blockFrom; b <= blockTo; b++ {
-			block := gdb.GetBlock(b)
+		for b := blockFrom + 1; b <= blockTo; b++ {
+			block, err := rpc.BlockByNumber(context.TODO(), big.NewInt(int64(b)))
+			if err != nil {
+				panic(err) // TODO: try again
+			}
 			if block == nil {
 				break
 			}
-			n := nodes[block.Atropos]
+			n := nodes[hash.Event(block.Hash())]
 			markAsAtropos(n)
 		}
 
@@ -117,8 +126,11 @@ func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch
 		g.Set("ranksep", "0.05")
 		graph.AddSubgraph(g)
 
-		validators := gdb.GetHistoryEpochState(epoch).Validators
-
+		vv, err := rpc.GetValidators(context.TODO(), epoch)
+		if err != nil {
+			panic(err) // TODO: try again
+		}
+		validators := parseValidatorProfiles(vv)
 		sortedIDs := make([]idx.ValidatorID, validators.Len())
 		copy(sortedIDs, validators.IDs())
 		sort.Slice(sortedIDs, func(i, j int) bool {
@@ -149,12 +161,16 @@ func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch
 
 		nodes = make(map[hash.Event]*dot.Node)
 		processed = make(map[hash.Event]dag.Event, 1000)
-		err := orderer.Reset(epoch, validators)
+		err = orderer.Reset(epoch, validators)
 		if err != nil {
 			panic(err)
 		}
 		dagIndexer.Reset(validators, memorydb.New(), func(id hash.Event) dag.Event {
-			return gdb.GetEvent(id)
+			e, err := rpc.GetEvent(context.TODO(), id)
+			if err != nil {
+				panic(err) // TODO: try again
+			}
+			return e
 		})
 	}
 
@@ -204,7 +220,7 @@ func readDagGraph(gdb *gossip.Store, cfg integration.Configs, from, to idx.Epoch
 
 	// 3. Iterate over events:
 
-	gdb.ForEachEvent(from, func(e *inter.EventPayload) bool {
+	rpc.ForEachEvent(from, func(e *inter.EventPayload) bool {
 		// current epoch is finished, so process accumulated events
 		if epoch < e.Epoch() {
 			// break after last epoch:
@@ -242,4 +258,13 @@ func markAsAtropos(n *dot.Node) {
 	// n.setAttr("xlabel", "atropos")
 	n.Set("style", "filled")
 	n.Set("fillcolor", "#FF0000")
+}
+
+func parseValidatorProfiles(vv inter.ValidatorProfiles) *pos.Validators {
+	b := pos.NewBuilder()
+	for id, v := range vv {
+		w := pos.Weight(v.Weight.Uint64())
+		b.Set(id, w)
+	}
+	return b.Build()
 }
