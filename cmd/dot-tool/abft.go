@@ -8,7 +8,6 @@ import (
 	"math/big"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/Fantom-foundation/go-opera/ftmclient"
 	"github.com/Fantom-foundation/go-opera/integration"
@@ -25,10 +24,15 @@ import (
 	"github.com/golang-collections/collections/stack"
 
 	"github.com/Fantom-foundation/dag2dot-tool/dot"
+	"github.com/Fantom-foundation/dag2dot-tool/types"
 )
 
 // readCurrentEpochDag reads epoch's events into inmem dot.Graph
-func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Graph {
+func readCurrentEpochDag(
+	ctx context.Context, rpc *ftmclient.Client, cfg integration.Configs,
+) (
+	epoch idx.Epoch, graph *dot.Graph, elems *types.GraphData, err error,
+) {
 	// 0. Set gossip data:
 
 	cdb := abft.NewMemStore()
@@ -41,14 +45,14 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 		vecmt2dagidx.Wrap(dagIndexer),
 		panics("Lachesis"),
 		cfg.Lachesis)
-	err := orderer.Bootstrap(abft.OrdererCallbacks{})
+	err = orderer.Bootstrap(abft.OrdererCallbacks{})
 	if err != nil {
-		panic(err)
+		return
 	}
 
 	// 1. Set dot.Graph data:
-
-	graph := dot.NewGraph("DOT")
+	elems = &types.GraphData{}
+	graph = dot.NewGraph("DOT")
 	graph.Set("clusterrank", "local")
 	graph.Set("newrank", "true")
 	graph.Set("ranksep", "0.05")
@@ -64,11 +68,10 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 	// 2. Set event processor data:
 
 	var (
-		epoch     idx.Epoch
 		processed map[hash.Event]dag.Event
 	)
 
-	finishCurrentEpoch := func(epoch idx.Epoch) {
+	finishCurrentEpoch := func(epoch idx.Epoch) error {
 		for f := idx.Frame(0); f <= cdb.GetLastDecidedFrame(); f++ {
 			rr := cdb.GetFrameRoots(f)
 			for _, r := range rr {
@@ -77,22 +80,22 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 			}
 		}
 
-		blockFrom, err := rpc.GetEpochBlock(context.TODO(), epoch)
+		blockFrom, err := rpc.GetEpochBlock(ctx, epoch)
 		if err != nil {
-			panic(err) // TODO: try again
+			return err
 		}
-		blockTo, err := rpc.GetEpochBlock(context.TODO(), epoch+1)
+		blockTo, err := rpc.GetEpochBlock(ctx, epoch+1)
 		if err != nil {
-			panic(err) // TODO: try again
+			return err
 		}
 		if blockTo == 0 {
 			blockTo = idx.Block(math.MaxUint64)
 		}
 
 		for b := blockFrom + 1; b <= blockTo; b++ {
-			block, err := rpc.BlockByNumber(context.TODO(), big.NewInt(int64(b)))
+			block, err := rpc.BlockByNumber(ctx, big.NewInt(int64(b)))
 			if err != nil {
-				panic(err) // TODO: try again
+				return err
 			}
 			if block == nil {
 				break
@@ -106,9 +109,11 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 		graph.SameRank([]string{
 			"\"" + strings.Join(emitters, `" -> "`) + "\" [style = invis, constraint = true];",
 		})
+
+		return nil
 	}
 
-	resetToNewEpoch := func(epoch idx.Epoch) {
+	resetToNewEpoch := func(epoch idx.Epoch) error {
 		// ApplyGenesis()
 		cdb.SetEpochState(&abft.EpochState{
 			Epoch: epoch,
@@ -117,9 +122,9 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 			LastDecidedFrame: abft.FirstFrame - 1,
 		})
 
-		vv, err := rpc.GetValidators(context.TODO(), epoch)
+		vv, err := rpc.GetValidators(ctx, epoch)
 		if err != nil {
-			panic(err) // TODO: try again
+			return err
 		}
 		validators := parseValidatorProfiles(vv)
 		sortedIDs := make([]idx.ValidatorID, validators.Len())
@@ -147,6 +152,7 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 			pseudoNode.Set("style", "invis")
 			pseudoNode.Set("width", "0")
 			sg.AddNode(pseudoNode)
+			elems.AddNode(pseudoNode)
 		}
 		clusters += maxID
 
@@ -157,12 +163,11 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 			panic(err)
 		}
 		dagIndexer.Reset(validators, memorydb.New(), func(id hash.Event) dag.Event {
-			e, err := rpc.GetEvent(context.TODO(), id)
-			if err != nil {
-				panic(err) // TODO: try again
-			}
-			return e
+			panic("Has not to be used!")
+
 		})
+
+		return nil
 	}
 
 	buffer := dagordering.New(
@@ -172,7 +177,7 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 				processed[e.ID()] = e
 				err = dagIndexer.Add(e)
 				if err != nil {
-					panic(err)
+					return err
 				}
 				dagIndexer.Flush()
 				orderer.Process(e)
@@ -181,6 +186,7 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 				n := dot.NewNode(name)
 				sg := subGraphs[e.Creator()]
 				sg.AddNode(n)
+				elems.AddNode(n)
 				nodes[e.ID()] = n
 
 				for _, h := range e.Parents() {
@@ -191,6 +197,7 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 					} else {
 						graph.AddEdge(ref)
 					}
+					elems.AddEdge(ref)
 				}
 
 				return nil
@@ -210,14 +217,14 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 		})
 
 	// 3. Iterate over events:
-	top, err := rpc.GetHeads(context.TODO(), PendingEpoch)
+	top, err := rpc.GetHeads(ctx, PendingEpoch)
 	if err != nil {
-		log.Panicf("Can not get top events: %s\n", err)
+		log.Printf("Can not get top events!\n")
+		return
 	}
 	if len(top) == 0 {
-		log.Printf("No epoch heads\n")
-		time.Sleep(1 * time.Second)
-		return nil
+		err = fmt.Errorf("No epoch heads!")
+		return
 	}
 	hashStack := stack.New()
 	for _, h := range top {
@@ -225,14 +232,19 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 	}
 	for hashStack.Len() > 0 {
 		h := hashStack.Pop().(hash.Event)
-		e, err := rpc.GetEvent(context.TODO(), h)
+		var e inter.EventI
+		e, err = rpc.GetEvent(ctx, h)
 		if err != nil {
-			log.Panicf("Can not get event: %s\n", err)
+			log.Printf("Can not get event.\n")
+			return
 		}
 
 		if epoch == 0 {
 			epoch = e.Epoch()
-			resetToNewEpoch(epoch)
+			err = resetToNewEpoch(epoch)
+			if err != nil {
+				return
+			}
 		}
 
 		buffer.PushEvent(e, "")
@@ -241,10 +253,10 @@ func readCurrentEpochDag(rpc *ftmclient.Client, cfg integration.Configs) *dot.Gr
 			hashStack.Push(parent)
 		}
 	}
-	finishCurrentEpoch(epoch)
 
 	// 4. Result:
-	return graph
+	err = finishCurrentEpoch(epoch)
+	return
 }
 
 func panics(name string) func(error) {
