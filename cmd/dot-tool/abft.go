@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/Fantom-foundation/go-opera/ftmclient"
 	"github.com/Fantom-foundation/go-opera/integration"
@@ -45,21 +46,18 @@ func readCurrentEpochDag(
 		vecmt2dagidx.Wrap(dagIndexer),
 		panics("Lachesis"),
 		cfg.Lachesis)
-	err = orderer.Bootstrap(abft.OrdererCallbacks{})
-	if err != nil {
-		return
-	}
 
 	// 1. Set dot.Graph data:
+
 	elems = &types.GraphData{}
-	graph = dot.NewGraph("DOT")
+	name := fmt.Sprintf("DAG%d", time.Now().UnixNano())
+	graph = dot.NewGraph(name)
 	graph.Set("clusterrank", "local")
 	graph.Set("newrank", "true")
 	graph.Set("ranksep", "0.05")
 	graph.Set("compound", "true")
 	graph.SetGlobalEdgeAttr("constraint", "true")
 	var (
-		clusters  idx.ValidatorID
 		subGraphs map[idx.ValidatorID]*dot.SubGraph
 		emitters  []string
 		nodes     map[hash.Event]*dot.Node
@@ -94,14 +92,19 @@ func readCurrentEpochDag(
 
 		for b := blockFrom + 1; b <= blockTo; b++ {
 			block, err := rpc.BlockByNumber(ctx, big.NewInt(int64(b)))
-			if err != nil {
+			if err != nil && err.Error() != "not found" {
 				return err
 			}
 			if block == nil {
 				break
 			}
 			n := nodes[hash.Event(block.Hash())]
-			markAsAtropos(n)
+			if n != nil {
+				markAsAtropos(n)
+			} else {
+				// TODO: download sealed epoch also, not only unfinished by heads
+				// fmt.Printf("lost event %s\n", hash.Event(block.Hash()).String())
+			}
 		}
 
 		// NOTE: github.com/tmc/dot renders subgraphs not in the ordering that specified
@@ -121,11 +124,16 @@ func readCurrentEpochDag(
 		cdb.SetLastDecidedState(&abft.LastDecidedState{
 			LastDecidedFrame: abft.FirstFrame - 1,
 		})
+		err = orderer.Bootstrap(abft.OrdererCallbacks{})
+		if err != nil {
+			return err
+		}
 
 		vv, err := rpc.GetValidators(ctx, epoch)
 		if err != nil {
 			return err
 		}
+
 		validators := parseValidatorProfiles(vv)
 		sortedIDs := make([]idx.ValidatorID, validators.Len())
 		copy(sortedIDs, validators.IDs())
@@ -134,16 +142,12 @@ func readCurrentEpochDag(
 		})
 		subGraphs = make(map[idx.ValidatorID]*dot.SubGraph, len(sortedIDs))
 		emitters = make([]string, 0, len(sortedIDs))
-		var maxID idx.ValidatorID
-		for _, v := range sortedIDs {
-			if maxID < v {
-				maxID = v
-			}
-			emitter := fmt.Sprintf("emitter-%d", clusters+v)
+		for idx, v := range sortedIDs {
+			emitter := fmt.Sprintf("emitter-%d", v)
 			emitters = append(emitters, emitter)
-			sg := dot.NewSubgraph(fmt.Sprintf("cluster%d", clusters+v))
+			sg := dot.NewSubgraph(fmt.Sprintf("cluster%d", idx))
 			sg.Set("label", fmt.Sprintf("emitter-%d", v))
-			sg.Set("sortv", fmt.Sprintf("%d", clusters+v))
+			sg.Set("sortv", fmt.Sprintf("%d", v))
 			sg.Set("style", "dotted")
 			subGraphs[v] = sg
 			graph.AddSubgraph(sg)
@@ -154,7 +158,6 @@ func readCurrentEpochDag(
 			sg.AddNode(pseudoNode)
 			elems.AddNode(pseudoNode)
 		}
-		clusters += maxID
 
 		nodes = make(map[hash.Event]*dot.Node)
 		processed = make(map[hash.Event]dag.Event, 1000)
@@ -163,8 +166,11 @@ func readCurrentEpochDag(
 			panic(err)
 		}
 		dagIndexer.Reset(validators, memorydb.New(), func(id hash.Event) dag.Event {
-			panic("Has not to be used!")
-
+			e, ok := processed[id]
+			if !ok {
+				panic("impossible")
+			}
+			return e
 		})
 
 		return nil
@@ -175,6 +181,7 @@ func readCurrentEpochDag(
 		dagordering.Callback{
 			Process: func(e dag.Event) error {
 				processed[e.ID()] = e
+
 				err = dagIndexer.Add(e)
 				if err != nil {
 					return err
@@ -202,11 +209,6 @@ func readCurrentEpochDag(
 
 				return nil
 			},
-			Released: func(e dag.Event, peer string, err error) {
-				if err != nil {
-					panic(err)
-				}
-			},
 			Get: func(id hash.Event) dag.Event {
 				return processed[id]
 			},
@@ -217,6 +219,10 @@ func readCurrentEpochDag(
 		})
 
 	// 3. Iterate over events:
+	var (
+		queue      = stack.New()
+		downloaded = make(map[hash.Event]struct{})
+	)
 	top, err := rpc.GetHeads(ctx, PendingEpoch)
 	if err != nil {
 		log.Printf("Can not get top events!\n")
@@ -226,18 +232,22 @@ func readCurrentEpochDag(
 		err = fmt.Errorf("No epoch heads!")
 		return
 	}
-	hashStack := stack.New()
 	for _, h := range top {
-		hashStack.Push(h)
+		queue.Push(h)
 	}
-	for hashStack.Len() > 0 {
-		h := hashStack.Pop().(hash.Event)
+	for queue.Len() > 0 {
+		h := queue.Pop().(hash.Event)
+		if _, ok := downloaded[h]; ok {
+			continue
+		}
+
 		var e inter.EventI
 		e, err = rpc.GetEvent(ctx, h)
 		if err != nil {
-			log.Printf("Can not get event.\n")
+			log.Printf("Can not get event %s.\n", h.String())
 			return
 		}
+		downloaded[h] = struct{}{}
 
 		if epoch == 0 {
 			epoch = e.Epoch()
@@ -250,7 +260,7 @@ func readCurrentEpochDag(
 		buffer.PushEvent(e, "")
 
 		for _, parent := range e.Parents() {
-			hashStack.Push(parent)
+			queue.Push(parent)
 		}
 	}
 
@@ -278,10 +288,9 @@ func markAsAtropos(n *dot.Node) {
 }
 
 func parseValidatorProfiles(vv inter.ValidatorProfiles) *pos.Validators {
-	b := pos.NewBuilder()
+	b := pos.NewBigBuilder()
 	for id, v := range vv {
-		w := pos.Weight(v.Weight.Uint64())
-		b.Set(id, w)
+		b.Set(id, v.Weight)
 	}
 	return b.Build()
 }
