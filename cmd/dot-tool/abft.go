@@ -219,6 +219,7 @@ func readCurrentEpochDag(
 		})
 
 	// 3. Iterate over events:
+
 	var (
 		queue      = stack.New()
 		downloaded = make(map[hash.Event]struct{})
@@ -265,6 +266,7 @@ func readCurrentEpochDag(
 	}
 
 	// 4. Result:
+
 	err = finishCurrentEpoch(epoch)
 	return
 }
@@ -278,13 +280,13 @@ func panics(name string) func(error) {
 func markAsRoot(n *dot.Node) {
 	// n.setAttr("xlabel", "root")
 	n.Set("style", "filled")
-	n.Set("fillcolor", "#FFFF00")
+	n.Set("fillcolor", colorRoot)
 }
 
 func markAsAtropos(n *dot.Node) {
 	// n.setAttr("xlabel", "atropos")
 	n.Set("style", "filled")
-	n.Set("fillcolor", "#FF0000")
+	n.Set("fillcolor", colorAtropos)
 }
 
 func parseValidatorProfiles(vv inter.ValidatorProfiles) *pos.Validators {

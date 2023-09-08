@@ -13,6 +13,10 @@ import (
 )
 
 func flushToFile(cfg *Config, epoch idx.Epoch, g *dot.Graph) {
+	if g == nil {
+		return
+	}
+
 	prefix := g.Name()
 	if cfg.OnlyEpoch {
 		prefix = fmt.Sprintf("DAG-EPOCH-%d", epoch)
