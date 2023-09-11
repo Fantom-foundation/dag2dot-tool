@@ -3,7 +3,7 @@ module github.com/Fantom-foundation/dag2dot-tool
 go 1.17
 
 require (
-	github.com/Fantom-foundation/go-opera v1.1.3-rc.3
+	github.com/Fantom-foundation/go-opera v0.0.0-20230911011512-def8619b8157
 	github.com/Fantom-foundation/lachesis-base v0.0.0-20230817040848-1326ba9aa59b
 	github.com/ethereum/go-ethereum v1.10.8
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
