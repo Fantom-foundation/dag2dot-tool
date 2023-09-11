@@ -9,6 +9,11 @@ type GraphData struct {
 }
 
 // Add a node
+func (gd *GraphData) NodesCount() int {
+	return len(gd.nodes)
+}
+
+// Add a node
 func (gd *GraphData) AddNode(n *dot.Node) {
 	if gd.nodes == nil {
 		gd.nodes = make(map[string]*dot.Node)
@@ -23,38 +28,44 @@ func (gd *GraphData) AddEdge(e *dot.Edge) {
 		gd.edges = make(map[string]*dot.Edge)
 	}
 
-	key := e.Source().Name()+"->"+e.Destination().Name()
+	key := e.Source().Name() + "->" + e.Destination().Name()
 	gd.edges[key] = e
 }
 
 // Mark the change in the graph data using new color
-func (gd *GraphData) MarkChanges(old *GraphData, newColor, newPenWidth, colorRoot, colorNewRoot, colorOldRoot string) {
+func (gd *GraphData) MarkChanges(old *GraphData, newColor, newPenWidth, colorRoot, colorNewRoot, colorAtropos, colorNewAtropos string) {
 	if old == nil {
 		return
 	}
 
-	for k, n := range gd.nodes {
-		oldNode, ok := old.nodes[k]
-		if !ok {
-			n.Set("color", newColor)
-			n.Set("penwidth", newPenWidth)
+	is := func(n *dot.Node, color string) bool {
+		return n.Get("fillcolor") == color
+	}
+
+	for k, newNode := range gd.nodes {
+		oldNode, exists := old.nodes[k]
+		if !exists {
+			newNode.Set("color", newColor)
+			newNode.Set("penwidth", newPenWidth)
 		} else {
-			if n.Get("fillcolor") != oldNode.Get("fillcolor") {
-				n.Set("style", "filled")
-				if n.Get("fillcolor") == colorRoot {
-					n.Set("fillcolor", colorNewRoot)
-				} else {
-					n.Set("fillcolor", colorOldRoot)
+			if !is(oldNode, newNode.Get("fillcolor")) {
+				newNode.Set("style", "filled")
+
+				if is(newNode, colorRoot) && !is(oldNode, colorNewRoot) {
+					newNode.Set("fillcolor", colorNewRoot)
+				}
+				if is(newNode, colorAtropos) && !is(oldNode, colorNewAtropos) {
+					newNode.Set("fillcolor", colorNewAtropos)
 				}
 			}
 		}
 	}
 
-	for k, e := range gd.edges {
-		_, ok := old.edges[k]
-		if !ok {
-			e.Set("color", newColor)
-			e.Set("penwidth", newPenWidth)
+	for k, newEdge := range gd.edges {
+		_, exists := old.edges[k]
+		if !exists {
+			newEdge.Set("color", newColor)
+			newEdge.Set("penwidth", newPenWidth)
 		}
 	}
 }
